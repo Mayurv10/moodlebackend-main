@@ -235,11 +235,6 @@ async def chat(request: ChatRequest):
         if source and source != 'Unknown Source' and source not in unique_sources:
             unique_sources.append(source)
 
-    if unique_sources:
-        logger.info(f"Sources found: {', '.join(unique_sources)}")
-    else:
-        logger.info("Sources not found")
-
     # Calculate final display scores (average of top 5)
     if top_candidates:
         avg_hybrid = sum(c['hybrid'] for c in top_candidates) / len(top_candidates)
