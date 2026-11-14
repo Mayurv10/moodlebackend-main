@@ -124,20 +124,48 @@ function addMessage(text, type, relevance = null, breakdown = null, sources = nu
         div.appendChild(headerDiv);
     }
 
+    // Strip out backend-fallback markdown sources if present to show stylized UI sources
+    let cleanText = text;
+    const sourceMarkerIndex = cleanText.indexOf("\n\n**Sources:**");
+    if (sourceMarkerIndex !== -1) {
+        cleanText = cleanText.substring(0, sourceMarkerIndex);
+    }
+
     const content = document.createElement('div');
-    content.innerText = text;
+    content.innerText = cleanText;
     div.appendChild(content);
 
-    if (sources && sources.length > 0) {
+    // Extract sources if not passed as array but present in text fallback
+    let displaySources = sources;
+    if (!displaySources && sourceMarkerIndex !== -1) {
+        const rawSourcesStr = text.substring(sourceMarkerIndex + 14).trim();
+        if (rawSourcesStr) {
+            displaySources = rawSourcesStr.split(",").map(s => s.trim());
+        }
+    }
+
+    // Suppress sources display for fallback or greeting responses
+    if (cleanText.includes("I don't have enough specific material") || 
+        cleanText.includes("I am sorry, but I cannot engage") || 
+        cleanText.includes("admin side issues")) {
+        displaySources = null;
+    }
+
+    if (displaySources && displaySources.length > 0) {
         const sourcesDiv = document.createElement('div');
-        sourcesDiv.style.marginTop = '0.5rem';
-        sourcesDiv.style.paddingTop = '0.4rem';
+        sourcesDiv.style.marginTop = '10px';
+        sourcesDiv.style.paddingTop = '8px';
         sourcesDiv.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
         sourcesDiv.style.fontSize = '0.75rem';
-        sourcesDiv.style.color = '#94a3b8';
-        let sourcesHtml = '<strong>Sources:</strong>';
-        sources.forEach(src => {
-            sourcesHtml += ` <span style="display:inline-block; background:rgba(255, 255, 255, 0.1); padding:2px 6px; border-radius:4px; margin-left:4px;">📄 ${src}</span>`;
+        sourcesDiv.style.color = 'var(--text-secondary)';
+
+        let sourcesHtml = "<strong>Sources:</strong>";
+        displaySources.forEach(src => {
+            sourcesHtml += ` <span style="display:inline-block; background:rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding:2px 8px; border-radius:12px; margin-left:6px; font-weight:500; font-size:0.7rem; color:var(--text-primary);">📄 ${src}</span>`;
+        });
+        sourcesDiv.innerHTML = sourcesHtml;
+        div.appendChild(sourcesDiv);
+    }
         });
         sourcesDiv.innerHTML = sourcesHtml;
         div.appendChild(sourcesDiv);
