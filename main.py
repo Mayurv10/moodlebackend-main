@@ -1,21 +1,22 @@
 import os
 from pymilvus import MilvusClient
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
 import google.generativeai as genai
 from dotenv import load_dotenv
 import shutil
-from ingest import ingest_all
-from typing import List
+from typing import List, Optional
+import datetime
+import json
 from logger_config import logger
 from pypdf import PdfReader
 import io
+import traceback
 
 # Initialize App
 app = FastAPI()
@@ -30,10 +31,12 @@ if allowed_origins_raw == "*":
 else:
     origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
 
+# Fix #6: allow_credentials=True with wildcard origin is rejected by browsers.
+# Only enable credentials when specific origins are explicitly listed.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=(origins != ["*"]),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -95,10 +98,14 @@ if not client.has_collection(COLLECTION_NAME):
 else:
     logger.info(f"Using existing Milvus collection: {COLLECTION_NAME}")
 
-# Load the collection to memory for searching
+# Load the collection to memory for searching (with timeout to avoid blocking startup)
 logger.info(f"Loading collection '{COLLECTION_NAME}'...")
-client.load_collection(COLLECTION_NAME)
-logger.info(f"Collection '{COLLECTION_NAME}' loaded successfully.")
+try:
+    client.load_collection(COLLECTION_NAME, timeout=30)
+    logger.info(f"Collection '{COLLECTION_NAME}' loaded successfully.")
+except Exception as load_e:
+    # Milvus will auto-load on first search; don't block server startup
+    logger.warning(f"load_collection timed out or failed ({load_e}). Server will start anyway — Milvus loads on demand.")
 
 # --------------------------
 # Utilities
@@ -125,16 +132,65 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[st
     return chunks
 
 # --------------------------
+# Rate Limiting Utilities
+# --------------------------
+QUERY_COUNTS_FILE = os.path.join("data", "user_query_counts.json")
+MAX_DAILY_QUERIES = 5
+
+def _load_query_counts() -> dict:
+    if os.path.exists(QUERY_COUNTS_FILE):
+        try:
+            with open(QUERY_COUNTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error reading query counts file: {e}")
+    return {}
+
+def _save_query_counts(counts: dict):
+    os.makedirs("data", exist_ok=True)
+    try:
+        with open(QUERY_COUNTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(counts, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving query counts file: {e}")
+
+def check_and_increment_query_limit(user_key: str) -> tuple[bool, int]:
+    """
+    Check if user_key has exceeded MAX_DAILY_QUERIES today.
+    Returns (is_allowed, queries_remaining).
+    Increments count if allowed.
+    """
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    counts = _load_query_counts()
+    
+    # Keep only current date to prevent unbounded growth
+    counts = {d: u for d, u in counts.items() if d == today_str}
+    
+    today_counts = counts.get(today_str, {})
+    current_count = today_counts.get(user_key, 0)
+    
+    if current_count >= MAX_DAILY_QUERIES:
+        return False, 0
+    
+    today_counts[user_key] = current_count + 1
+    counts[today_str] = today_counts
+    _save_query_counts(counts)
+    
+    queries_remaining = MAX_DAILY_QUERIES - (current_count + 1)
+    return True, queries_remaining
+
+# --------------------------
 # Models
 # --------------------------
 class SessionRequest(BaseModel):
-    index_id: int
+    index_id: Optional[int] = 0
     session_id: str = "default"
 
 class ChatRequest(BaseModel):
-    index_id: int
+    index_id: Optional[int] = 0
     question: str
     session_id: str = "default"
+    user_id: Optional[str] = None
 
 # Global In-Memory Session History
 # Structure: { session_id: [ {"role": "user", "parts": [...]}, {"role": "model", "parts": [...]} ] }
@@ -145,6 +201,7 @@ SESSION_HISTORY = {}
 # --------------------------
 
 @app.post("/api/session")
+@app.post("/session")
 async def start_session(request: SessionRequest):
     """
     Validate index and return initial content for the session.
@@ -174,6 +231,7 @@ async def start_session(request: SessionRequest):
     }
 
 @app.post("/api/chat")
+@app.post("/chat")
 async def chat(request: ChatRequest):
     """
     Joint Hybrid Search: 
@@ -181,6 +239,15 @@ async def chat(request: ChatRequest):
     2. Re-rank them using BM25 keyword scores.
     3. Pick the top 5 best-performing chunks for Gemini.
     """
+    # 0. Check daily query rate limit (5 queries per user per day)
+    user_key = (request.user_id and str(request.user_id).strip()) or request.session_id or "anonymous"
+    is_allowed, remaining_queries = check_and_increment_query_limit(user_key)
+    if not is_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="You have reached your daily limit of 5 queries per day. Please try again tomorrow."
+        )
+
     # 1. Embed the question
     question_embedding = model.encode(request.question).tolist()
     query_tokens = request.question.lower().split()
@@ -192,7 +259,7 @@ async def chat(request: ChatRequest):
             data=[question_embedding],
             limit=20, # Wider window for re-ranking
             filter=f"course_id == {request.index_id}", 
-            output_fields=["text"]
+            output_fields=["text", "metadata_source"]
         )
     except Exception as e:
         logger.error(f"Milvus Search Error: {e}")
@@ -218,6 +285,7 @@ async def chat(request: ChatRequest):
             
             candidates.append({
                 "text": res['entity']['text'],
+                "source": res['entity'].get('metadata_source'),
                 "dense": dense_score,
                 "bm25": bm25_percentage,
                 "hybrid": hybrid_score
@@ -301,15 +369,29 @@ async def chat(request: ChatRequest):
 
         except Exception as e:
             logger.error(f"Gemini API Error: {type(e).__name__}: {e}")
-            import traceback
             logger.error(traceback.format_exc())
             final_answer = "admin side issues please contact admin"
+
+    # Collect unique source document names from top matching chunks
+    sources = []
+    if top_candidates and not any(phrase in final_answer for phrase in [
+        "I don't have enough specific material",
+        "I am sorry, but I cannot engage",
+        "Based on my internal knowledge",
+        "admin side issues please contact admin"
+    ]):
+        for c in top_candidates:
+            src = c.get("source")
+            if src and src not in sources:
+                sources.append(src)
 
     return {
         "relevance_score": f"{avg_hybrid:.1f}%",
         "breakdown": f"Dense: {avg_dense:.1f}% | BM25: {avg_bm25:.1f}%",
         "answer": final_answer, 
-        "context_used": True
+        "sources": sources,
+        "context_used": bool(sources),
+        "queries_remaining": remaining_queries
     }
 
 def process_and_ingest(index_id: int, text_content: str, filename: str):
@@ -368,7 +450,6 @@ def process_and_ingest(index_id: int, text_content: str, filename: str):
 
     except Exception as e:
         logger.error(f"Failed to process {filename}: {e}")
-        import traceback
         logger.error(traceback.format_exc())
 
 @app.post("/api/upload")
@@ -480,7 +561,7 @@ async def bulk_upload_files(
 
     return JSONResponse(status_code=202, content={
         "message": "Bulk upload received. Processing files in the background.",
-        "details": summary
+        "results": summary  # Fix #1: frontend & tests expect "results" not "details"
     })
 
 

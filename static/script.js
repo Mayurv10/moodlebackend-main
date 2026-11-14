@@ -48,7 +48,7 @@ async function startSession(idxFromUrl = null) {
         errorMsg.style.display = 'none';
 
     } catch (err) {
-        // ...
+        showError("Course not found. Please check the ID and try again.");
     }
 }
 
@@ -77,17 +77,27 @@ async function sendMessage() {
             body: JSON.stringify({ index_id: parseInt(currentId), question: msg })
         });
 
+        if (response.status === 429) {
+            const errData = await response.json().catch(() => ({}));
+            addMessage(`⚠️ ${errData.detail || "Daily limit of 5 queries per day reached."}`, 'bot');
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error("Server error");
+        }
+
         const data = await response.json();
 
         // Add Bot Message
-        addMessage(data.answer, 'bot', data.relevance_score, data.breakdown);
+        addMessage(data.answer, 'bot', data.relevance_score, data.breakdown, data.sources);
 
     } catch (err) {
         addMessage("Error processing your request.", 'bot');
     }
 }
 
-function addMessage(text, type, relevance = null, breakdown = null) {
+function addMessage(text, type, relevance = null, breakdown = null, sources = null) {
     const box = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message ${type}-msg fade-in`;
@@ -117,6 +127,21 @@ function addMessage(text, type, relevance = null, breakdown = null) {
     const content = document.createElement('div');
     content.innerText = text;
     div.appendChild(content);
+
+    if (sources && sources.length > 0) {
+        const sourcesDiv = document.createElement('div');
+        sourcesDiv.style.marginTop = '0.5rem';
+        sourcesDiv.style.paddingTop = '0.4rem';
+        sourcesDiv.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
+        sourcesDiv.style.fontSize = '0.75rem';
+        sourcesDiv.style.color = '#94a3b8';
+        let sourcesHtml = '<strong>Sources:</strong>';
+        sources.forEach(src => {
+            sourcesHtml += ` <span style="display:inline-block; background:rgba(255, 255, 255, 0.1); padding:2px 6px; border-radius:4px; margin-left:4px;">📄 ${src}</span>`;
+        });
+        sourcesDiv.innerHTML = sourcesHtml;
+        div.appendChild(sourcesDiv);
+    }
 
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
@@ -183,12 +208,15 @@ function showError(msg) {
 }
 
 // Enter key support
-document.getElementById('chat-input').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
+const chatInput = document.getElementById('chat-input');
+if (chatInput) {
+    chatInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+}
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {

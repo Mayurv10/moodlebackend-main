@@ -8,8 +8,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-# Use --no-cache-dir to keep image small
-RUN pip install --no-cache-dir -r requirements.txt
+# Use pip cache mount to speed up builds and avoid redownloading packages
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
