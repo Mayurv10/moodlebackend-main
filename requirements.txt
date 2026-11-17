@@ -1,10 +1,15 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 fastapi
 uvicorn
 python-dotenv
 google-generativeai
 sentence-transformers
+tokenizers>=0.23.1,<0.24.0
+safetensors>=0.8.0
 scikit-learn
-pymilvus
+pymilvus>=2.3.7
+marshmallow<4.0.0
 rank_bm25
 python-multipart
 pypdf

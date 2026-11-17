@@ -24,12 +24,13 @@ def test_large_upload():
         print("Response status code:", response.status_code)
         print("Response body:", response.json())
         
-        if response.status_code == 200:
+        # Fix #10: endpoint returns 202 Accepted (background processing), not 200
+        if response.status_code == 202:
             results = response.json().get("results", [])
-            if results and results[0]["status"] == "success":
-                print("SUCCESS: Large file uploaded and truncated correctly.")
+            if results and results[0]["status"] == "queued":
+                print("SUCCESS: Large file upload queued for background processing.")
             else:
-                print("FAILURE: Upload did not return success.")
+                print("FAILURE: Upload did not return queued status.")
         else:
             print(f"FAILURE: Status code {response.status_code}")
             

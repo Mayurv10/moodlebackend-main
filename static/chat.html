@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Assistant | Knowledge Voyage</title>
+    <meta name="description" content="AI-powered study assistant for Christ University course materials.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- Login / Index Selection View -->
+        <div id="login-view" class="glass-card fade-in" style="max-width: 500px; margin: 0 auto;">
+            <h1>Knowledge Voyage</h1>
+            <p class="subtitle">Enter your Course ID to start a study session.</p>
+
+            <div class="input-group" style="flex-direction: column; gap: 1rem;">
+                <input type="number" id="index-input" placeholder="Enter Course ID (e.g. 101)" />
+                <button onclick="startSession()">Start Session</button>
+                <p id="error-msg"
+                    style="color: #ef4444; font-size: 0.85rem; text-align: center; display: none; margin: 0;">
+                </p>
+            </div>
+
+            <!-- Upload Section -->
+            <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--card-border);">
+                <p style="color: var(--text-secondary); font-size: 0.85rem; text-align: center; margin-bottom: 1rem;">
+                    Or upload a file to a course
+                </p>
+                <div class="input-group" style="flex-direction: column; gap: 0.75rem;">
+                    <input type="number" id="upload-index-id" placeholder="Course ID for upload" />
+                    <input type="file" id="upload-file" accept=".txt,.pdf"
+                        style="background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.75rem; color: white; font-size: 0.9rem;" />
+                    <button onclick="uploadFile()" style="font-size: 0.9rem; padding: 0.75rem 1.5rem;">Upload &
+                        Ingest</button>
+                    <p id="upload-status"
+                        style="font-size: 0.8rem; text-align: center; margin: 0; color: var(--text-secondary);"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session View (Two-Column Layout) -->
+        <div id="session-view" class="hidden">
+
+            <!-- Left Column: Source Content -->
+            <div class="session-left">
+                <div class="glass-card" style="display: flex; flex-direction: column; height: 100%; padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="margin: 0; font-size: 1.2rem; color: var(--accent);">
+                            📄 Course <span id="session-id"></span>
+                        </h2>
+                        <button onclick="exitSession()"
+                            style="background: rgba(239,68,68,0.2); color: #ef4444; padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 8px;">
+                            ✕ Exit
+                        </button>
+                    </div>
+                    <div id="initial-content" class="source-content"></div>
+                </div>
+            </div>
+
+            <!-- Right Column: Chat -->
+            <div class="session-right">
+                <div class="glass-card" style="display: flex; flex-direction: column; height: 100%; padding: 1.5rem;">
+                    <h2 style="margin: 0 0 0.5rem; font-size: 1.2rem; color: var(--accent);">💬 Ask Questions</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0 0 1rem;">
+                        Ask anything about the course material.
+                    </p>
+
+                    <div id="chat-box" class="chat-box"></div>
+
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <input type="text" id="chat-input" placeholder="Ask your question..." autocomplete="off" />
+                        <button onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+
+</html>

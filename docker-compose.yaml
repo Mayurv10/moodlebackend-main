@@ -1,11 +1,11 @@
-version: "3.9"
+
 
 services:
   chatbot-backend:
     build: .
     container_name: moodle-chatbot
     ports:
-      - "8001:8000" # Host 8001 -> Container 8000
+      - "5000:8000" # Host 5000 -> Container 8000
     environment:
       - MILVUS_URI=http://milvus-standalone:19530
       - MILVUS_USER=${MILVUS_USER}
@@ -49,7 +49,7 @@ services:
     image: zilliz/attu:latest
     container_name: attu
     ports:
-      - "8000:3000" # Host 8000 -> Container 3000 (Attu GUI)
+      - "8001:3000" # Host 8001 -> Container 3000 (Attu GUI)
     environment:
       MILVUS_URL: milvus-standalone:19530
     depends_on:

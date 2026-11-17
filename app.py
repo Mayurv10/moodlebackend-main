@@ -12,7 +12,9 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 # Milvus Config
 COLLECTION_NAME = "knowledge_base"
 URI = os.getenv("MILVUS_URI", "http://localhost:19530")
-client = MilvusClient(uri=URI)
+MILVUS_USER = os.getenv("MILVUS_USER", "root")
+MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "Milvus")
+client = MilvusClient(uri=URI, user=MILVUS_USER, password=MILVUS_PASSWORD)
 
 def get_data(user_input: str):
     # 1️⃣ DIRECT COURSE ID LOOKUP
@@ -72,16 +74,17 @@ def get_data(user_input: str):
 # -----------------------------
 # CLI LOOP
 # -----------------------------
-print("[SEARCH] Milvus Chunk Search Ready")
-print("Enter Course ID or ask a question.")
-print("Type 'exit' to quit.\n")
+if __name__ == "__main__":
+    print("[SEARCH] Milvus Chunk Search Ready")
+    print("Enter Course ID or ask a question.")
+    print("Type 'exit' to quit.\n")
 
-while True:
-    user_input = input("You: ")
+    while True:
+        user_input = input("You: ")
 
-    if user_input.lower() == "exit":
-        print("Goodbye")
-        break
+        if user_input.lower() == "exit":
+            print("Goodbye")
+            break
 
-    answer = get_data(user_input)
-    print(f"AI: {answer}\n")
+        answer = get_data(user_input)
+        print(f"AI: {answer}\n")

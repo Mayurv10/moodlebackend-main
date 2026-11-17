@@ -48,7 +48,7 @@ async function startSession(idxFromUrl = null) {
         errorMsg.style.display = 'none';
 
     } catch (err) {
-        // ...
+        showError("Course not found. Please check the ID and try again.");
     }
 }
 
@@ -76,6 +76,16 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ index_id: parseInt(currentId), question: msg })
         });
+
+        if (response.status === 429) {
+            const errData = await response.json().catch(() => ({}));
+            addMessage(`⚠️ ${errData.detail || "Daily limit of 5 queries per day reached."}`, 'bot');
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error("Server error");
+        }
 
         const data = await response.json();
 
@@ -156,6 +166,10 @@ function addMessage(text, type, relevance = null, breakdown = null, sources = nu
         sourcesDiv.innerHTML = sourcesHtml;
         div.appendChild(sourcesDiv);
     }
+        });
+        sourcesDiv.innerHTML = sourcesHtml;
+        div.appendChild(sourcesDiv);
+    }
 
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
@@ -222,12 +236,15 @@ function showError(msg) {
 }
 
 // Enter key support
-document.getElementById('chat-input').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
+const chatInput = document.getElementById('chat-input');
+if (chatInput) {
+    chatInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+}
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {

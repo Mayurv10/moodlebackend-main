@@ -46,8 +46,6 @@ def ingest_all():
     else:
         logger.info(f"Using existing collection: {COLLECTION_NAME}")
 
-    logger.info(f"Created Milvus collection: {COLLECTION_NAME}")
-
     # Load data from text files in 'data' folder
     logger.info("Loading data from 'data/' directory...")
 
@@ -68,7 +66,14 @@ def ingest_all():
             continue
 
         logger.info(f"Processing Index {idx} ({filename})")
-        
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            text = f.read().strip()
+
+        if not text:
+            logger.warning(f"Empty file: {filename}")
+            continue
+
         chunks = chunk_text(text)
         total_chunks = len(chunks)
         if not chunks:
